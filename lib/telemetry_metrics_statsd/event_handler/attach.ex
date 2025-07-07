@@ -13,15 +13,16 @@ defmodule TelemetryMetricsStatsd.EventHandler.Attach do
   def init([%Options{} = options, emitter_module]) do
     Process.flag(:trap_exit, true)
 
-    handler_ids =
-      EventHandler.attach(
-        options.name,
-        options.metrics,
-        emitter_module,
-        options.prefix,
-        options.formatter,
-        options.global_tags
-      )
+    emitter_function =
+      case Options.emit_kind(options) do
+        :sync ->
+          :emit
+
+        :async ->
+          :emit_async
+      end
+
+    handler_ids = EventHandler.attach(options, emitter_module, emitter_function)
 
     {:ok, handler_ids}
   end

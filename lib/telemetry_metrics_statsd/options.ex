@@ -100,6 +100,8 @@ defmodule TelemetryMetricsStatsd.Options do
 
   defstruct Keyword.keys(@schema)
 
+  @type t :: %__MODULE__{}
+
   @spec docs() :: String.t()
   def docs do
     NimbleOptions.docs(@schema)
@@ -149,6 +151,15 @@ defmodule TelemetryMetricsStatsd.Options do
 
   def formatter(term),
     do: {:error, "expected :formatter be either :standard or :datadog, got #{inspect(term)}"}
+
+  @spec emit_kind(t()) :: :sync | :async
+  def emit_kind(%__MODULE__{} = options) do
+    if is_integer(options.max_queue_dwell_time) do
+      :async
+    else
+      :sync
+    end
+  end
 
   defp rename_socket_path(opts) do
     if socket_path = Keyword.get(opts, :socket_path) do
