@@ -656,6 +656,38 @@ defmodule TelemetryMetricsStatsdTest do
     end
   end
 
+  describe "async emit" do
+    test "is disabled by default" do
+      spy(Emitter.UDP)
+      {socket, port} = given_udp_port_opened()
+
+      counter = given_counter("async_emit.count")
+
+      start_reporter(metrics: [counter], port: port)
+
+      :telemetry.execute([:async_emit], %{}, %{})
+
+      assert_reported(socket, "async_emit.count:1|c")
+      refute_called(Emitter.UDP.emit_async(_name, _data))
+    end
+
+    test "is enabled if the max_queue_dwell_time is set" do
+      spy(Emitter.UDP)
+      {socket, port} = given_udp_port_opened()
+
+      counter = given_counter("async_emit.count")
+
+      start_reporter(metrics: [counter], port: port, max_queue_dwell_time: 50)
+
+      expected_metric = "async_emit.count:1|c"
+      :telemetry.execute([:async_emit], %{}, %{})
+
+      assert_reported(socket, expected_metric)
+      assert_called(Emitter.UDP.emit_async(_name, data))
+      assert data == expected_metric
+    end
+  end
+
   defp given_udp_port_opened(inet_address_family \\ :inet) do
     {:ok, socket} = :gen_udp.open(0, [:binary, inet_address_family, active: false])
 
