@@ -81,8 +81,10 @@ defmodule TelemetryMetricsStatsd.Options do
       doc:
         "The maximum amount of time, in milliseconds, a message should wait in the emitter's message queue before messages are throttled. " <>
           "If a probe message waits in the queue longer than `max_queue_dwell_time`, the percentage of " <>
-          "messages emitted is reduced by 50%. The percentage of messages emitted goes up by 1% if a probe message sits in" <>
-          "the queue less than the `max_queue_dwell_time`."
+          "messages emitted is reduced by 50%. The percentage of messages emitted goes up by 1% if a probe message sits in " <>
+          "the queue less than the `max_queue_dwell_time`. " <>
+          "This setting enables asynchronous metrics emission, without any backpressure on the caller, since throttling will provide " <>
+          "overload protection. Asynchronous metric emission should have less impact on callers than the default synchronous emission. "
     ],
     dwell_time_check_interval: [
       type: :pos_integer,
@@ -99,6 +101,8 @@ defmodule TelemetryMetricsStatsd.Options do
   ]
 
   defstruct Keyword.keys(@schema)
+
+  @type t :: %__MODULE__{}
 
   @spec docs() :: String.t()
   def docs do
@@ -149,6 +153,15 @@ defmodule TelemetryMetricsStatsd.Options do
 
   def formatter(term),
     do: {:error, "expected :formatter be either :standard or :datadog, got #{inspect(term)}"}
+
+  @spec emit_kind(t()) :: :sync | :async
+  def emit_kind(%__MODULE__{} = options) do
+    if is_integer(options.max_queue_dwell_time) do
+      :async
+    else
+      :sync
+    end
+  end
 
   defp rename_socket_path(opts) do
     if socket_path = Keyword.get(opts, :socket_path) do

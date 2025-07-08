@@ -3,32 +3,44 @@ defmodule TelemetryMetricsStatsd.EventHandler do
 
   alias Telemetry.Metrics
   alias TelemetryMetricsStatsd.Formatter
+  alias TelemetryMetricsStatsd.Options
+
+  @type function_name :: atom()
+
+  defstruct [
+    :emitter_function,
+    :emitter_module,
+    :formatter,
+    :global_tags,
+    :metrics,
+    :name,
+    :prefix
+  ]
 
   @spec attach(
-          GenServer.name(),
-          [Metrics.t()],
+          options :: Options.t(),
           emitter_module :: module(),
-          prefix :: String.t() | nil,
-          formatter :: Formatter.t(),
-          global_tags :: Keyword.t()
-        ) :: [
-          :telemetry.handler_id()
-        ]
-  def attach(registered_name, metrics, emitter_module, prefix, formatter, global_tags) do
-    metrics_by_event = Enum.group_by(metrics, & &1.event_name)
+          emitter_function :: function_name()
+        ) ::
+          [:telemetry.handler_id()]
+  def attach(%Options{} = options, emitter_module, emitter_function) do
+    metrics_by_event = Enum.group_by(options.metrics, & &1.event_name)
+    registered_name = options.name
 
     for {event_name, metrics} <- metrics_by_event do
       handler_id = handler_id(registered_name, event_name, emitter_module)
 
-      :ok =
-        :telemetry.attach(handler_id, event_name, &__MODULE__.handle_event/4, %{
-          emitter_module: emitter_module,
-          formatter: formatter,
-          global_tags: global_tags,
-          metrics: metrics,
-          name: registered_name,
-          prefix: prefix
-        })
+      state = %__MODULE__{
+        emitter_function: emitter_function,
+        emitter_module: emitter_module,
+        formatter: options.formatter,
+        global_tags: options.global_tags,
+        metrics: metrics,
+        name: registered_name,
+        prefix: options.prefix
+      }
+
+      :ok = :telemetry.attach(handler_id, event_name, &__MODULE__.handle_event/4, state)
 
       handler_id
     end
@@ -39,14 +51,17 @@ defmodule TelemetryMetricsStatsd.EventHandler do
     Enum.each(handler_ids, &:telemetry.detach/1)
   end
 
-  def handle_event(event, measurements, metadata, %{
-        emitter_module: emitter_module,
-        formatter: formatter_mod,
-        global_tags: global_tags,
-        metrics: metrics,
-        name: name,
-        prefix: prefix
-      }) do
+  def handle_event(event, measurements, metadata, %__MODULE__{} = state) do
+    %__MODULE__{
+      emitter_function: emitter_function,
+      emitter_module: emitter_module,
+      formatter: formatter_mod,
+      global_tags: global_tags,
+      metrics: metrics,
+      name: name,
+      prefix: prefix
+    } = state
+
     metrics =
       for metric <- metrics,
           keep?(metric, metadata),
@@ -65,7 +80,7 @@ defmodule TelemetryMetricsStatsd.EventHandler do
     if internal?(event) do
       publish_internal_metrics(emitter_module, name, metrics)
     else
-      publish_metrics(emitter_module, name, metrics)
+      publish_metrics(emitter_module, emitter_function, name, metrics)
     end
   end
 
@@ -121,11 +136,16 @@ defmodule TelemetryMetricsStatsd.EventHandler do
   defp internal?([:telemetry_metrics_statsd | _]), do: true
   defp internal?(_), do: false
 
-  @spec publish_metrics(emitter_module :: module(), name :: GenServer.name(), [binary()]) :: :ok
-  defp publish_metrics(_emitter_module, _name, []), do: :ok
+  @spec publish_metrics(
+          emitter_module :: module(),
+          emitter_function :: atom(),
+          name :: GenServer.name(),
+          [binary()]
+        ) :: :ok
+  defp publish_metrics(_emitter_module, _emitter_function, _name, []), do: :ok
 
-  defp publish_metrics(emitter_module, name, metrics) do
-    Enum.each(metrics, fn metric -> emitter_module.emit(name, metric) end)
+  defp publish_metrics(emitter_module, emitter_function, name, metrics) do
+    Enum.each(metrics, fn metric -> apply(emitter_module, emitter_function, [name, metric]) end)
   end
 
   defp publish_internal_metrics(_emitter_module, _name, []), do: :ok
