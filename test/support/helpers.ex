@@ -3,13 +3,10 @@ defmodule TelemetryMetricsStatsd.Test.Helpers do
 
   alias TelemetryMetricsStatsd.Options
 
-  def new_emitter(emitter_module, defaults, overrides) do
-    {supervised?, overrides} = Keyword.pop(overrides, :supervised?, true)
+  def new_emitter(emitter_module, options) do
+    {supervised?, options} = Keyword.pop(options, :supervised?, true)
 
-    {:ok, options} =
-      defaults
-      |> Keyword.merge(overrides)
-      |> Options.validate()
+    {:ok, options} = Options.validate(options)
 
     if supervised? do
       ExUnit.Callbacks.start_supervised({emitter_module, options})
