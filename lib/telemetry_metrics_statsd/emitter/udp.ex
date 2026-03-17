@@ -50,8 +50,8 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
     udp_options = Map.take(options, ~w(host port inet_address_family host_resolution_interval)a)
     initial_state = struct!(__MODULE__, udp_options)
 
-    with {:ok, state} <- configure_host_resolution(initial_state),
-         {:ok, state} <- open_socket(state) do
+    with {:ok, %__MODULE__{} = state} <- configure_host_resolution(initial_state),
+         {:ok, %__MODULE__{} = state} <- open_socket(state) do
       dwell_time_micros =
         if is_integer(options.max_queue_dwell_time) do
           options.max_queue_dwell_time * 1000

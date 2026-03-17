@@ -1,5 +1,6 @@
 defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
   alias TelemetryMetricsStatsd.Emitter
+  alias TelemetryMetricsStatsd.Test.Helpers
 
   use ExUnit.Case
   use ExUnitProperties
@@ -8,18 +9,50 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
   import ExUnit.CaptureLog
   import Liveness
   import Record
-  import TelemetryMetricsStatsd.Test.Helpers
 
   defrecordp :hostent, extract(:hostent, from_lib: "kernel/include/inet.hrl")
+  defrecordp :socket_emitter, socket: nil, pid: nil, port: nil
 
   @metric "metric1:1|c"
+
+  defp emit(socket_emitter(pid: pid), data) do
+    emit(pid, data)
+  end
+
+  defp emit(pid, data) when is_pid(pid) do
+    Helpers.emit(pid, data)
+  end
 
   def new_emitter(options \\ []) do
     name = Keyword.get(options, :name, Emitter)
 
     defaults = [host: "127.0.0.1", port: 8893, name: name, emitters: 1, metrics: []]
 
-    new_emitter(Emitter.UDP, defaults, options)
+    Helpers.new_emitter(Emitter.UDP, defaults, options)
+  end
+
+  defp new_socket_emitter(options) do
+    with {:ok, socket, port} <- open_socket() do
+      options
+      |> Keyword.put_new(:port, port)
+      |> new_emitter()
+      |> then(fn
+        {:ok, emitter_pid} ->
+          {:ok, socket_emitter(socket: socket, pid: emitter_pid, port: port)}
+      end)
+    end
+  end
+
+  def open_socket do
+    with {:ok, socket} <- :socket.open(:inet, :dgram, :udp),
+         :ok <- :socket.bind(socket, %{family: :inet, port: 0, addr: {127, 0, 0, 1}}),
+         {:ok, %{port: port}} <- :socket.sockname(socket) do
+      on_exit(fn ->
+        :socket.close(socket)
+      end)
+
+      {:ok, socket, port}
+    end
   end
 
   defp patch_socket_init do
@@ -27,8 +60,18 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
     patch(:socket, :connect, :ok)
   end
 
+  defp receive_metrics(socket_emitter(socket: socket), timeout \\ 100) do
+    case :socket.recv(socket, 0, [], timeout) do
+      {:ok, data} ->
+        List.wrap(data)
+
+      _ ->
+        []
+    end
+  end
+
   describe "start_link/1" do
-    test "opens an inet socket by default" do
+    test "opens an ipv4 socket by default" do
       patch_socket_init()
 
       {:ok, _} = new_emitter()
@@ -49,75 +92,65 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
 
   describe "emitting metrics" do
     test "metrics are sent immediately if the mtu is 0" do
-      patch(:socket, :send, :ok)
+      {:ok, socket_emitter} = new_socket_emitter(mtu: 0)
 
-      {:ok, emitter} = new_emitter(mtu: 0)
+      emit(socket_emitter, @metric)
 
-      emit(emitter, @metric)
-
-      assert_called :socket.send(_, [@metric])
+      assert [@metric] = receive_metrics(socket_emitter)
     end
 
     test "buffers data if under the mtu" do
-      patch(:socket, :send, :ok)
+      {:ok, socket_emitter} = new_socket_emitter(mtu: byte_size(@metric) + 1)
 
-      {:ok, emitter} = new_emitter(mtu: byte_size(@metric) + 1)
-
-      emit(emitter, @metric)
-
-      refute_any_call :socket.send()
+      emit(socket_emitter, @metric)
+      assert [] == receive_metrics(socket_emitter)
     end
 
     test "emits data over the mtu" do
-      patch(:socket, :send, :ok)
+      {:ok, socket_emitter} = new_socket_emitter(mtu: byte_size(@metric) - 1)
+      emit(socket_emitter, @metric)
 
-      {:ok, emitter} = new_emitter(mtu: byte_size(@metric) - 1)
-      emit(emitter, @metric)
-
-      assert_called :socket.send(_, [@metric])
+      assert [@metric] = receive_metrics(socket_emitter)
     end
 
     test "emits all metrics if the old data is below the mtu and the new data is above the mtu" do
-      patch(:socket, :send, :ok)
-
       over_mtu_metric = "metric1:11|c"
 
-      {:ok, emitter} = new_emitter(mtu: byte_size(over_mtu_metric), flush_timeout: 10)
-      emit(emitter, @metric)
+      {:ok, socket_emitter} =
+        new_socket_emitter(mtu: byte_size(over_mtu_metric), flush_timeout: 10)
 
-      refute_any_call :socket.send()
+      emit(socket_emitter, @metric)
 
-      emit(emitter, over_mtu_metric)
+      assert [] = receive_metrics(socket_emitter, 5)
 
-      assert_called :socket.send(_, [@metric])
-      assert_called :socket.send(_, [^over_mtu_metric])
+      emit(socket_emitter, over_mtu_metric)
+      assert [@metric] = receive_metrics(socket_emitter)
+      assert [^over_mtu_metric] = receive_metrics(socket_emitter)
     end
 
     test "sends data after a timeout" do
-      patch(:socket, :send, :ok)
+      {:ok, socket_emitter} = new_socket_emitter(flush_timeout: 10)
 
-      {:ok, emitter} = new_emitter(flush_timeout: 10)
-      emit(emitter, @metric)
+      emit(socket_emitter, @metric)
 
-      refute_any_call :socket.send()
+      # the timeout of 5ms is beneath the flush timeout
+      assert [] = receive_metrics(socket_emitter, 5)
 
-      eventually(fn -> assert_called(:socket.send(_, [@metric])) end)
+      # The default timeout is 100ms, which is over the flush timeout
+      assert [@metric] = receive_metrics(socket_emitter)
     end
 
     test "does not reset the flush timeout when it receives a resolution message" do
-      patch(:socket, :send, :ok)
+      {:ok, socket_emitter(pid: emitter_pid) = emitter} = new_socket_emitter(flush_timeout: 50)
 
-      refute_any_call :socket.send()
-
-      {:ok, emitter} = new_emitter(flush_timeout: 50)
       emit(emitter, @metric)
-      send(emitter, :resolve_host)
+
+      send(emitter_pid, :resolve_host)
 
       {elapsed_us, _} =
         :timer.tc(fn ->
-          refute_any_call :socket.send()
-
-          rapid_eventually(fn -> assert_called :socket.send(_, [@metric]) end)
+          assert [] == receive_metrics(emitter, 0)
+          assert [@metric] = receive_metrics(emitter)
         end)
 
       assert elapsed_us in 48_000..60_000
@@ -128,14 +161,12 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
     end
 
     test "does not reset the flush timeout after it receives a dwell time probe" do
-      patch(:socket, :send, :ok)
       spy(Emitter.Congestion)
-      refute_any_call :socket.send()
 
-      {:ok, emitter} = new_emitter(flush_timeout: 50)
+      {:ok, socket_emitter(pid: emitter_pid) = emitter} = new_socket_emitter(flush_timeout: 50)
 
       emit(emitter, @metric)
-      send(emitter, :check_dwell_time)
+      send(emitter_pid, :check_dwell_time)
 
       {elapsed_us, _} =
         :timer.tc(fn ->
@@ -143,9 +174,8 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
             assert_called(Emitter.Congestion.calculate_emit_percentage(_, _, _))
           end)
 
-          refute_any_call :socket.send()
-
-          rapid_eventually(fn -> assert_called :socket.send(_, [@metric]) end)
+          assert [] = receive_metrics(emitter, 0)
+          assert [@metric] = receive_metrics(emitter)
         end)
 
       assert elapsed_us in 45_000..60_000
@@ -190,15 +220,13 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
     end
 
     test "crashes on startup when it fails" do
-      patch(:inet, :gethostbyname, {:error, :nxdomain})
-
-      assert {:error, :nxdomain} = new_emitter(host: "localhost", supervised?: false)
+      invalid_domain = "#{System.unique_integer()}.stinkypants.zorg"
+      assert {:error, :nxdomain} = new_emitter(host: invalid_domain, supervised?: false)
     end
 
     test "handles failures on the resolution interval gracefully" do
-      patch_socket_init()
-      patch(:socket, :send, :ok)
       spy(Emitter.UDP)
+      spy(:socket)
 
       host_entry = hostent(h_addr_list: [{127, 0, 0, 1}])
 
@@ -210,17 +238,17 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
         cycle([{:ok, host_entry}, {:error, :nxdomain}])
       )
 
-      {:ok, emitter} =
-        new_emitter(host: "localhost", host_resolution_interval: 100, flush_timeout: 10)
+      {:ok, socket_emitter(pid: emitter_pid) = emitter} =
+        new_socket_emitter(host: "localhost", host_resolution_interval: 100, flush_timeout: 10)
 
-      send(emitter, :resolve_host)
+      send(emitter_pid, :resolve_host)
       emit(emitter, @metric)
 
       eventually(fn -> assert_called(Emitter.UDP.handle_info(:resolve_host, _)) end)
-      eventually(fn -> assert_called :socket.send(_, [@metric]) end)
+      eventually(fn -> assert [@metric] = receive_metrics(emitter) end)
 
       # we should only connect once at the beginning if resolution failed.
-      assert_called :socket.connect(:socket, %{port: _, addr: {127, 0, 0, 1}, family: :inet}), 1
+      assert_called :socket.connect(_, %{port: _, addr: {127, 0, 0, 1}, family: :inet}), 1
     end
 
     test "is periodically repeated if configured" do
