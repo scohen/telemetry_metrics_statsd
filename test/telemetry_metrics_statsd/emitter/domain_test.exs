@@ -28,7 +28,7 @@ defmodule TelemetryMetricsStatsd.Emitter.DomainTest do
     defaults = [
       socket_path: @socket_path,
       name: name,
-      emitters: 1,
+      sockets: 1,
       metrics: [],
       dwell_time_check_interval: 50
     ]

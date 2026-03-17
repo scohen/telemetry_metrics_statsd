@@ -68,7 +68,7 @@ defmodule TelemetryMetricsStatsd.Options do
         "The maximum amount of time, in milliseconds that a metric can sit in an emitter's buffer before being" <>
           "written to the socket. Only used by the UDP emitter."
     ],
-    emitters: [
+    sockets: [
       type: :pos_integer,
       default: 1,
       doc:

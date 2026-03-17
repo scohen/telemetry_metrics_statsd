@@ -26,7 +26,7 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
   def new_emitter(options \\ []) do
     name = Keyword.get(options, :name, Emitter)
 
-    defaults = [host: "127.0.0.1", port: 8893, name: name, emitters: 1, metrics: []]
+    defaults = [host: "127.0.0.1", port: 8893, name: name, sockets: 1, metrics: []]
 
     Helpers.new_emitter(Emitter.UDP, defaults, options)
   end

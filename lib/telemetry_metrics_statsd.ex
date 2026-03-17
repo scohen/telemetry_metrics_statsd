@@ -364,12 +364,12 @@ defmodule TelemetryMetricsStatsd do
   second on a single server. That said, this baseline  can be dramatically improved by configuring the library for the specific needs
   of your application.
 
-  For the UDP emitter, pay attention to the `mtu` and `emitters` keys. In testing, it was found that setting the `mtu` correctly has
-  a dramatic impact on performance. The default value for `emitters` is conservative, it can likely be increased, and our testing
+  For the UDP emitter, pay attention to the `mtu` and `sockets` keys. In testing, it was found that setting the `mtu` correctly has
+  a dramatic impact on performance. The default value for `sockets` is conservative, it can likely be increased, and our testing
   indicated that `5` is a reasonable size for the pool. Increasing it beyond this value was found to negatively impact throughput. You
   are encouraged to experiment and find the values that work for you.
 
-  For the Unix Domain socket emitter, testing indicated that increasing the `emitters` value beyond `2` negatively impacted performance.
+  For the Unix Domain socket emitter, testing indicated that increasing the `sockets` value beyond `2` negatively impacted performance.
 
 
   ## Metrics
@@ -468,7 +468,7 @@ defmodule TelemetryMetricsStatsd do
            [
              child_spec: emitter_module.child_spec(options),
              name: emitter_module.supervisor_name(options.name),
-             partitions: options.emitters
+             partitions: options.sockets
            ]},
           {EventHandler, [options, emitter_module]}
         ]
