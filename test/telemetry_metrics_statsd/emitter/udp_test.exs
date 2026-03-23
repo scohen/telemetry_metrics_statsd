@@ -221,7 +221,9 @@ defmodule TelemetryMetricsStatsd.Emitter.UdpTest do
 
     test "crashes on startup when it fails" do
       invalid_domain = "#{System.unique_integer()}.stinkypants.zorg"
-      assert {:error, :nxdomain} = new_emitter(host: invalid_domain, supervised?: false)
+
+      assert {:error, :nxdomain} =
+               new_emitter(host: invalid_domain, supervised?: false, link?: false)
     end
 
     test "handles failures on the resolution interval gracefully" do

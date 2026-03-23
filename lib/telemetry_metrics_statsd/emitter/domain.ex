@@ -38,6 +38,10 @@ defmodule TelemetryMetricsStatsd.Emitter.Domain do
     GenServer.start_link(__MODULE__, options)
   end
 
+  def start(%Options{} = options) do
+    GenServer.start(__MODULE__, options)
+  end
+
   # OTP Callbacks
 
   @impl GenServer

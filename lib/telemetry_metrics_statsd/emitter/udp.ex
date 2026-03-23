@@ -28,9 +28,12 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
     :socket
   ]
 
-  ## Client
   def start_link(%Options{} = options) do
     GenServer.start_link(__MODULE__, options)
+  end
+
+  def start(%Options{} = options) do
+    GenServer.start(__MODULE__, options)
   end
 
   @impl TelemetryMetricsStatsd.Emitter
