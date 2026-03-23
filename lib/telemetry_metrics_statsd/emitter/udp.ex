@@ -69,6 +69,9 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
 
       schedule_dwell_time_check(state)
       {:ok, state}
+    else
+      {:error, reason} ->
+        {:stop, reason}
     end
   end
 
