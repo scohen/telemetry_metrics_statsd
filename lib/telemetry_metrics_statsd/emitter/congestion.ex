@@ -1,15 +1,14 @@
 defmodule TelemetryMetricsStatsd.Emitter.Congestion do
-  @moduledoc """
-  Congestion handling
+  @moduledoc false
 
-  This module implements congestion flow control using the additive increase / multiplicative
-  decrease algorithm. When congestion is detected, the percentage of metrics being emitted is
-  reduced by half. When congestion alleviates, every call to increases amount of metrics emitted
-  by 1%.
-
-  This algorithm has a floor of 0.1% of metrics emitted. Continued failures won't lower the
-  percentage of metrics emitted
-  """
+  # Congestion handling
+  # This module implements congestion flow control using the additive increase / multiplicative
+  # decrease algorithm. When congestion is detected, the percentage of metrics being emitted is
+  # reduced by half. When congestion alleviates, every call to increases amount of metrics emitted
+  # by 1%.
+  #
+  # This algorithm has a floor of 0.1% of metrics emitted. Continued failures won't lower the
+  # percentage of metrics emitted
 
   @type emit_percentage :: float()
   @type elapsed_microseconds :: non_neg_integer()

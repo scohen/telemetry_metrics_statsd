@@ -178,11 +178,9 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
         :ok
 
       {:error, :econnrefused} ->
-        # TODO: Carrying over socket lib behavior, this seems like something we'd like to know about.
         :ok
 
       {:error, :eagain} ->
-        # TODO: Carrying over socket lib behavior, this seems like something we'd like to know about.
         :ok
 
       {:error, reason} ->

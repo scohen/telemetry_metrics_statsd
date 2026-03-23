@@ -33,7 +33,8 @@ defmodule TelemetryMetricsStatsd.Emitter.DomainTest do
       dwell_time_check_interval: 50
     ]
 
-    new_emitter(Emitter.Domain, defaults, options)
+    options = Keyword.merge(defaults, options)
+    new_emitter(Emitter.Domain, options)
   end
 
   describe "start_link/1" do
