@@ -76,6 +76,7 @@ defmodule TelemetryMetricsStatsd.Options do
     ],
     max_queue_dwell_time: [
       type: :pos_integer,
+      default: 1000,
       doc:
         "The maximum amount of time, in milliseconds, a message should wait in the emitter's message queue before messages are throttled. " <>
           "If a probe message waits in the queue longer than `max_queue_dwell_time`, the percentage of " <>
