@@ -75,7 +75,7 @@ defmodule TelemetryMetricsStatsd.Options do
         "The number of metrics emitters in the pool. Each metric emitter contains either a UDP or Unix Domain Socket."
     ],
     max_queue_dwell_time: [
-      type: :pos_integer,
+      type: {:or, [nil, :pos_integer]},
       default: 1000,
       doc:
         "The maximum amount of time, in milliseconds, a message should wait in the emitter's message queue before messages are throttled. " <>
