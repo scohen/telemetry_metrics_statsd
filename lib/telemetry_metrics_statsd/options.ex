@@ -82,8 +82,8 @@ defmodule TelemetryMetricsStatsd.Options do
           "If a probe message waits in the queue longer than `max_queue_dwell_time`, the percentage of " <>
           "messages emitted is reduced by 50%. The percentage of messages emitted goes up by 1% if a probe message sits in " <>
           "the queue less than the `max_queue_dwell_time`. " <>
-          "This setting enables asynchronous metrics emission, without any backpressure on the caller, since throttling will provide " <>
-          "overload protection. Asynchronous metric emission should have less impact on callers than the default synchronous emission. "
+          "When this option is not `nil`, metrics are emitted asynchronously, which should have less impact on the callers than the synchronous emission. " <>
+          "You can switch to synchronous emission by setting this option to `nil`."
     ],
     dwell_time_check_interval: [
       type: :pos_integer,
