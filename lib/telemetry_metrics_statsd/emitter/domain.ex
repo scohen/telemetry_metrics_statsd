@@ -22,6 +22,11 @@ defmodule TelemetryMetricsStatsd.Emitter.Domain do
   end
 
   @impl true
+  def emit_async(name, metric) do
+    GenServer.cast(via_tuple(name), {:emit, metric})
+  end
+
+  @impl true
   def emit_internal(name, metric) do
     GenServer.call(via_tuple(name), {:emit_internal, metric})
   end
@@ -90,6 +95,14 @@ defmodule TelemetryMetricsStatsd.Emitter.Domain do
   end
 
   @impl true
+  def handle_cast({:emit, metric}, %__MODULE__{} = state) do
+    case write_to_socket(state, metric, :normal) do
+      {:ok, state} -> {:noreply, state}
+      {:error, reason} -> {:stop, reason, state}
+    end
+  end
+
+  @impl true
   def handle_info(:check_dwell_time, %__MODULE__{} = state) do
     send(self(), {:probe_dwell_time, dwell_timestamp()})
     {:noreply, state}
@@ -112,6 +125,7 @@ defmodule TelemetryMetricsStatsd.Emitter.Domain do
   end
 
   # Private
+
   defp write_to_socket(%__MODULE__{} = state, data, :internal) do
     :socket.send(state.socket, data)
   end

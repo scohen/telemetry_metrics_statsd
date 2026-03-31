@@ -42,6 +42,11 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
   end
 
   @impl TelemetryMetricsStatsd.Emitter
+  def emit_async(name, data) do
+    GenServer.cast(via_tuple(name), {:emit, data})
+  end
+
+  @impl TelemetryMetricsStatsd.Emitter
   def emit_internal(name, data) do
     GenServer.cast(via_tuple(name), {:emit_internal, data})
   end
@@ -81,15 +86,7 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
   @behaviour TelemetryMetricsStatsd.Emitter
   @impl GenServer
   def handle_call({:emit, data}, _from, %__MODULE__{} = state) do
-    new_state =
-      case add_to_buffer(state, data) do
-        {:flush, buffers, new_buffer} when is_list(buffers) ->
-          Enum.each(buffers, &write_to_socket!(state, &1))
-          %__MODULE__{state | buffer: new_buffer}
-
-        {:buffer, buffer} ->
-          %__MODULE__{state | buffer: buffer}
-      end
+    new_state = do_emit(state, data)
 
     {:reply, :ok, new_state, state.flush_timeout}
   end
@@ -99,6 +96,12 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
     write_to_socket!(state, new_buffer(data))
 
     {:noreply, state, adjust_flush_timeout(state)}
+  end
+
+  @impl true
+  def handle_cast({:emit, data}, %__MODULE__{} = state) do
+    new_state = do_emit(state, data)
+    {:noreply, new_state, state.flush_timeout}
   end
 
   @impl true
@@ -163,6 +166,17 @@ defmodule TelemetryMetricsStatsd.Emitter.UDP do
   end
 
   ## Private
+
+  defp do_emit(%__MODULE__{} = state, data) do
+    case add_to_buffer(state, data) do
+      {:flush, buffers, new_buffer} when is_list(buffers) ->
+        Enum.each(buffers, &write_to_socket!(state, &1))
+        %__MODULE__{state | buffer: new_buffer}
+
+      {:buffer, buffer} ->
+        %__MODULE__{state | buffer: buffer}
+    end
+  end
 
   defp open_socket(%__MODULE__{} = state) do
     with {:ok, socket} <- :socket.open(state.inet_address_family, :dgram, :udp),
